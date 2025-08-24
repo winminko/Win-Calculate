@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1, user-scalable=no" />
-<title>Survey Tools • Points 3D / Circle / Right Triangle</title>
+<title>Survey Tools • Win-Calculate</title>
 
-<!-- PWA / A2HS -->
+<!-- PWA -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#6c5ce7">
+<meta name="theme-color" content="#6c5ce7" />
 
 <style>
   :root{--bg:#f6f7fb;--card:#ffffffee;--text:#0f1115;--muted:#5b616e;--line:#e8e9ef;--accent:#6c5ce7;--ok:#12b886;--danger:#ff6b6b}
@@ -20,337 +20,281 @@
   .tabs{position:fixed;top:60px;left:12px;right:12px;display:flex;gap:8px;z-index:19}
   .tab{padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-weight:800}
   .tab.active{background:var(--accent);color:#fff;border-color:transparent}
-  .section{display:none}
-  .section.show{display:block}
+  .section{display:none} .section.show{display:block}
   .panel{position:fixed;left:12px;right:12px;bottom:12px;z-index:15;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   label{font-size:13px;color:var(--muted)}
-  input[type=number]{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--text)}
-  .btn{padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:800}
+  input[type=number],input[type=text]{width:110px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--text)}
+  .btn{padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-weight:800;cursor:pointer}
   .btn.ok{background:var(--ok);color:#00130f;border:0}
-  .btn.danger{background:var(--danger);color:#fff;border:0}
+  .btn.danger,.btn.danger:where(*){background:var(--danger);color:#fff;border:0}
   .info{font-size:13px;white-space:pre-wrap;margin-top:6px}
   .mini{width:100%;max-width:360px;height:140px;border:1px dashed var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center}
-  canvas{touch-action:none}
-  /* stage for 3D */
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{background:rgba(0,0,0,.04)}
   #stage{position:fixed;inset:0;z-index:0}
   .axis{padding:2px 6px;border-radius:999px;background:#000;color:#fff;font-size:11px}
   .lbl{padding:3px 6px;border-radius:8px;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.12);font-size:12px;font-weight:800;color:#111}
   [data-theme="dark"] .lbl{background:rgba(23,26,34,.9);color:#fff;border-color:#000}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
-  th{background:rgba(0,0,0,.04)}
+  canvas{max-width:100%}
 </style>
 
-<!-- 3D libs -->
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'https://unpkg.com/three@0.158.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-/* ========= App chrome ========= */
+window.addEventListener('DOMContentLoaded', () => {
+/* ---------- DOM refs ---------- */
 const themeBtn=document.getElementById('theme');
-themeBtn.onclick=()=>{
-  const root=document.documentElement, now=root.getAttribute('data-theme');
-  root.setAttribute('data-theme', now==='dark'?'light':'dark');
-  themeBtn.textContent=(now==='dark')?'🌙':'☀️';
-  scene.background = new THREE.Color(getComputedStyle(root).getPropertyValue('--bg').trim()||'#fff');
-};
+const eIn=document.getElementById('eIn');
+const nIn=document.getElementById('nIn');
+const hIn=document.getElementById('hIn');
+
+/* ---------- Tabs/Theme ---------- */
 const tabEls=[...document.querySelectorAll('.tab')];
 const secs={points:document.getElementById('sec-points'),circle:document.getElementById('sec-circle'),right:document.getElementById('sec-right')};
-tabEls.forEach(t=>t.onclick=()=>{tabEls.forEach(x=>x.classList.remove('active')); t.classList.add('active');
-  Object.values(secs).forEach(s=>s.classList.remove('show')); document.getElementById(t.dataset.t).classList.add('show');
-});
+tabEls.forEach(t=>t.onclick=()=>{tabEls.forEach(x=>x.classList.remove('active'));t.classList.add('active');Object.values(secs).forEach(s=>s.classList.remove('show'));document.getElementById(t.dataset.t).classList.add('show');});
+themeBtn.onclick=()=>{const root=document.documentElement,now=root.getAttribute('data-theme');root.setAttribute('data-theme',now==='dark'?'light':'dark');themeBtn.textContent=(now==='dark')?'🌙':'☀️';scene.background=new THREE.Color(getComputedStyle(root).getPropertyValue('--bg').trim()||'#fff');};
 
-/* ========= 3D POINTS (with 2D EN mode) ========= */
+/* ---------- 3D POINTS (input-only) ---------- */
 const stage=document.getElementById('stage');
-const scene=new THREE.Scene();
-scene.background=new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#fff');
-const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,2000); camera.position.set(8,6,8);
-const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); stage.appendChild(renderer.domElement);
-const labelRenderer=new CSS2DRenderer(); labelRenderer.setSize(innerWidth,innerHeight);
-labelRenderer.domElement.style.position='fixed'; labelRenderer.domElement.style.inset='0'; labelRenderer.domElement.style.pointerEvents='none';
-stage.appendChild(labelRenderer.domElement);
-const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true; controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
-scene.add(new THREE.AmbientLight(0xffffff,.9)); const dl=new THREE.DirectionalLight(0xffffff,.45); dl.position.set(3,5,4); scene.add(dl);
-const grid=new THREE.GridHelper(200,200,0x999999,0xdddddd); scene.add(grid);
-const axes=new THREE.AxesHelper(6); scene.add(axes);
-const ax=(t,p)=>{const d=document.createElement('div');d.className='axis';d.textContent=t;const o=new CSS2DObject(d);o.position.copy(p);scene.add(o)};
-ax('E',new THREE.Vector3(6.8,0,0)); ax('N',new THREE.Vector3(0,6.8,0)); ax('H',new THREE.Vector3(0,0,6.8));
+const scene=new THREE.Scene();scene.background=new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#fff');
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,2000);camera.position.set(8,6,8);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);stage.appendChild(renderer.domElement);
+const labelRenderer=new CSS2DRenderer();labelRenderer.setSize(innerWidth,innerHeight);labelRenderer.domElement.style.position='fixed';labelRenderer.domElement.style.inset='0';labelRenderer.domElement.style.pointerEvents='none';stage.appendChild(labelRenderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
+scene.add(new THREE.AmbientLight(0xffffff,.9));const dl=new THREE.DirectionalLight(0xffffff,.45);dl.position.set(3,5,4);scene.add(dl);
+scene.add(new THREE.GridHelper(200,200,0x999999,0xdddddd));scene.add(new THREE.AxesHelper(6));
+const ax=(t,p)=>{const d=document.createElement('div');d.className='axis';d.textContent=t;const o=new CSS2DObject(d);o.position.copy(p);scene.add(o)};ax('E',new THREE.Vector3(6.8,0,0));ax('N',new THREE.Vector3(0,6.8,0));ax('H',new THREE.Vector3(0,0,6.8));
 
 const ptGeo=new THREE.SphereGeometry(0.11,24,24);
 const ptMat=new THREE.MeshStandardMaterial({color:0x111111,metalness:.1,roughness:.5});
-const P=[]; let counter=0;
+const P=[];let counter=0;
 const lbl=t=>{const el=document.createElement('div');el.className='lbl';el.textContent=t;return new CSS2DObject(el);};
-function addPoint(E,N,H,name){
-  const id=name||`P${++counter}`;
-  const m=new THREE.Mesh(ptGeo,ptMat); m.position.set(E,N,H); const l=lbl(id); m.add(l); scene.add(m);
-  const rec={id,mesh:m,pos:m.position}; P.push(rec); list(); info(); return rec;
-}
-function removeAt(i){const r=P[i]; if(!r) return; scene.remove(r.mesh); r.mesh.geometry.dispose(); P.splice(i,1); list(); if(selA===r||selB===r){selA=null;selB=null;link.clear();info();}}
+function addPoint(E,N,H,name){const id=name||`P${++counter}`;const m=new THREE.Mesh(ptGeo,ptMat);m.position.set(E,N,H);const l=lbl(id);m.add(l);scene.add(m);const rec={id,mesh:m,pos:m.position};P.push(rec);list();info();return rec;}
+function removeAt(i){const r=P[i];if(!r) return;scene.remove(r.mesh);r.mesh.geometry.dispose();P.splice(i,1);list();if(selA===r||selB===r){selA=null;selB=null;link.clear();}info();}
 
-addPoint(0,0,0,'P1'); addPoint(2,0,0,'P2'); addPoint(2,2,0,'P3'); addPoint(0,2,0,'P4');
-
-let selA=null, selB=null; const link=new THREE.Group(); scene.add(link);
+let selA=null,selB=null;const link=new THREE.Group();scene.add(link);
 function glow(r,on){r.mesh.scale.setScalar(on?1.28:1.0);}
-function pick(r){ // may be patched by circle tool
-  if(!selA){selA=r; glow(selA,true);}
-  else if(!selB && r!==selA){selB=r; glow(selB,true); drawLine();}
-  else{glow(selA,false); glow(selB,false); selA=r; selB=null; link.clear(); glow(selA,true);}
-  info();
-}
-function drawLine(){link.clear(); const g=new THREE.BufferGeometry().setFromPoints([selA.pos.clone(),selB.pos.clone()]);
-  link.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0x2b2b2b})));}
+function drawLine(){link.clear();if(!(selA&&selB))return;const g=new THREE.BufferGeometry().setFromPoints([selA.pos.clone(),selB.pos.clone()]);link.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0x2b2b2b})));}
+/* tap to select (no long-press add) */
+const nearest=(cx,cy)=>{let best=null,dmin=28;P.forEach(r=>{const v=r.pos.clone().project(camera);const sx=(v.x*0.5+0.5)*innerWidth,sy=(-v.y*0.5+0.5)*innerHeight;const d=Math.hypot(sx-cx,sy-cy);if(d<dmin){dmin=d;best=r;}});return best;};
+renderer.domElement.addEventListener('pointerup',e=>{const r=renderer.domElement.getBoundingClientRect();const cx=e.clientX-r.left,cy=e.clientY-r.top;const hit=nearest(cx,cy);if(hit){if(!selA){selA=hit;glow(selA,true);}else if(!selB && hit!==selA){selB=hit;glow(selB,true);drawLine();}else{glow(selA,false);glow(selB,false);selA=hit;selB=null;link.clear();glow(selA,true);}info();}});
+
+document.getElementById('add').onclick=()=>addPoint(+eIn.value||0,+nIn.value||0,+hIn.value||0);
+document.getElementById('clearAll').onclick=()=>{while(P.length) removeAt(P.length-1);counter=0;};
+document.getElementById('reset').onclick=()=>{camera.position.set(8,6,8);controls.target.set(0,0,0);controls.update();};
+document.getElementById('mode2d').onchange=info;
+const items=document.getElementById('items');
+function list(){items.innerHTML='';P.forEach((r,i)=>{const row=document.createElement('div');row.style.cssText='display:flex;justify-content:space-between;gap:6px;padding:6px 0;border-bottom:1px solid var(--line)';row.innerHTML=`<div style="font-size:12.5px">${r.id}: (${R(r.pos.x)}, ${R(r.pos.y)}, ${R(r.pos.z)})</div>`;const box=document.createElement('div');const s=document.createElement('button');s.className='btn';s.textContent='Select';s.onclick=()=>{selA=r;selB=null;link.clear();glow(r,true);info();};const d=document.createElement('button');d.className='btn danger';d.textContent='Del';d.onclick=()=>removeAt(i);box.appendChild(s);box.appendChild(d);row.appendChild(box);items.appendChild(row);});}
 
 function info(){
   const Hin=+document.getElementById('Hin').value||0;
-  let t=`Hinput = ${rnd(Hin)}\n`;
-  if(selA){t+=`Selected: ${selA.id}`; if(selB) t+=` → ${selB.id}`; t+='\n';} else t+=`Selected: (choose any 2 points)\n`;
-  if(selA && selB){
-    const A=selA.pos,B=selB.pos;
-    const dE=B.x-A.x,dN=B.y-A.y,dH=B.z-A.z;
-    const dEN=Math.hypot(dE,dN), d3=Math.hypot(dEN,dH);
-    let plan=Math.atan2(dN,dE)*180/Math.PI; if(plan<0) plan+=360;
-    const elev=Math.atan2(dH,dEN)*180/Math.PI;
-    t+=`ΔE=${rnd(dE)}, ΔN=${rnd(dN)}, ΔH=${rnd(dH)}\nPlan dEN=${rnd(dEN)} | 3D=${rnd(d3)}\nPlan angle=${rnd(plan)}° | Elevation=${rnd(elev)}°`;
-    if(document.getElementById('mode2d').checked){
-      t+=`\n\n[2D EN Mode]\nΔE=${rnd(dE)}, ΔN=${rnd(dN)} | dEN=${rnd(dEN)} | Bearing from +E=${rnd(plan)}°`;
-    }
+  let t=`Hinput = ${R(Hin)}\n`;
+  if(P.length===0){document.getElementById('out').textContent=t+'No points yet. Enter E,N,H and tap "Add Point".';return;}
+  if(selA){t+=`Selected: ${selA.id}`;if(selB)t+=` → ${selB.id}`;t+='\n';}else t+='Selected: (choose any 2 points)\n';
+  if(selA&&selB){
+    const A=selA.pos,B=selB.pos,dE=B.x-A.x,dN=B.y-A.y,dH=B.z-A.z,dEN=Math.hypot(dE,dN),d3=Math.hypot(dEN,dH);let plan=Math.atan2(dN,dE)*180/Math.PI;if(plan<0)plan+=360;const elev=Math.atan2(dH,dEN)*180/Math.PI;
+    t+=`ΔE=${R(dE)}, ΔN=${R(dN)}, ΔH=${R(dH)}\nPlan dEN=${R(dEN)} | 3D=${R(d3)}\nPlan angle=${R(plan)}° | Elevation=${R(elev)}°`;
+    if(document.getElementById('mode2d').checked){t+=`\n\n[2D EN Mode]\nΔE=${R(dE)}, ΔN=${R(dN)} | dEN=${R(dEN)} | Bearing from +E=${R(plan)}°`;}
   }
   document.getElementById('out').textContent=t;
 }
-const rnd=v=>Number.isFinite(v)?(+v).toFixed(3):v;
+const R=v=>Number.isFinite(v)?(+v).toFixed(3):v;
 
-/* touch picking with long-press add */
-const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(); let timer=null, start=[0,0];
-const setNDC=e=>{const r=renderer.domElement.getBoundingClientRect(); const cx=(e.clientX??(e.touches&&e.touches[0].clientX));
-  const cy=(e.clientY??(e.touches&&e.touches[0].clientY)); ndc.x=((cx-r.left)/r.width)*2-1; ndc.y= -((cy-r.top)/r.height)*2+1; return {cx,cy};};
-const nearest=(cx,cy)=>{let best=null,dmin=28; P.forEach(r=>{const v=r.pos.clone().project(camera);
-  const sx=(v.x*0.5+0.5)*innerWidth, sy=(-v.y*0.5+0.5)*innerHeight; const d=Math.hypot(sx-cx, sy-cy); if(d<dmin){dmin=d;best=r;}}); return best;};
-const addAtCursor=()=>{const H=+document.getElementById('Hin').value||0; const plane=new THREE.Plane(new THREE.Vector3(0,0,1), -H);
-  const p=new THREE.Vector3(); ray.setFromCamera(ndc,camera); if(ray.ray.intersectPlane(plane,p)) addPoint(p.x,p.y,H);};
-renderer.domElement.addEventListener('pointerdown',e=>{e.preventDefault(); const {cx,cy}=setNDC(e); start=[cx,cy];
-  timer=setTimeout(()=>{addAtCursor(); timer=null; info();},600);},{passive:false});
-renderer.domElement.addEventListener('pointermove',e=>{if(!timer)return; const {cx,cy}=setNDC(e); if(Math.hypot(cx-start[0],cy-start[1])>18){clearTimeout(timer); timer=null;}},{passive:false});
-renderer.domElement.addEventListener('pointerup',e=>{e.preventDefault(); if(timer){clearTimeout(timer); timer=null; const {cx,cy}=setNDC(e); const r=nearest(cx,cy); if(r) pick(r);}},{passive:false});
+/* render & resize */
+(function loop(){controls.update();renderer.render(scene,camera);labelRenderer.render(scene,camera);requestAnimationFrame(loop);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);labelRenderer.setSize(innerWidth,innerHeight);});
 
-/* UI bindings for Points */
-document.getElementById('add').onclick=()=>addPoint(+eIn.value||0,+nIn.value||0,+hIn.value||0);
-document.getElementById('clearAll').onclick=()=>{while(P.length) removeAt(P.length-1); counter=0; info();};
-document.getElementById('reset').onclick=()=>{camera.position.set(8,6,8); controls.target.set(0,0,0); controls.update();};
-['Hin'].forEach(id=>document.getElementById(id).addEventListener('input', info));
-document.getElementById('mode2d').onchange=info;
+ /* ---------- Circle Center (Adjusted + Best-Fit) ---------- */
+const fmt=(v,d=3)=>Number(v).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+function centerFrom3(A,B,C){const x1=A.E,y1=A.N,x2=B.E,y2=B.N,x3=C.E,y3=C.N;const a1=x1-x2,b1=y1-y2,a2=x1-x3,b2=y1-y3;const e=((x1*x1-x2*x2)+(y1*y1-y2*y2))/2;const f=((x1*x1-x3*x3)+(y1*y1-y3*y3))/2;const det=a1*b2-b1*a2;if(Math.abs(det)<1e-12)return null;return {E:(e*b2-b1*f)/det,N:(a1*f-e*a2)/det};}
+const distEN=(c,p)=>Math.hypot(c.E-p.E,c.N-p.N);
+function computeAdjustedCenter(pts){const n=pts.length;if(n<3)throw Error("Need at least 3 points.");let se=0,sn=0,k=0;for(let i=0;i<n-2;i++)for(let j=i+1;j<n-1;j++)for(let m=j+1;m<n;m++){const c=centerFrom3(pts[i],pts[j],pts[m]);if(c){se+=c.E;sn+=c.N;k++;}}if(k===0)throw Error("No valid centers (collinear).");return {E:se/k,N:sn/k,validTriples:k};}
+function bestFitCircle(pts){const n=pts.length;if(n<3)throw Error("Need at least 3 points.");let Sx=0,Sy=0,Sxx=0,Syy=0,Sxy=0,S1=n,Tx=0,Ty=0,T1=0;for(const p of pts){const x=p.E,y=p.N,t=-(x*x+y*y);Sx+=x;Sy+=y;Sxx+=x*x;Syy+=y*y;Sxy+=x*y;Tx+=x*t;Ty+=y*t;T1+=t;}const M=[[Sxx,Sxy,Sx],[Sxy,Syy,Sy],[Sx,Sy,S1]], b=[Tx,Ty,	T1];const inv=inv3(M);if(!inv)throw Error("Best-fit failed.");const a=dot(inv[0],b),bb=dot(inv[1],b),c=dot(inv[2],b);const E0=-a/2,N0=-bb/2,r=Math.sqrt(Math.max(0,(a*a+bb*bb)/4-c));return {E:E0,N:N0,r};}
+const dot=(r,b)=>r[0]*b[0]+r[1]*b[1]+r[2]*b[2];
+function inv3(M){const d=M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1])-M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0])+M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);if(Math.abs(d)<1e-12)return null;return[
+  [(M[1][1]*M[2][2]-M[1][2]*M[2][1])/d,(M[0][2]*M[2][1]-M[0][1]*M[2][2])/d,(M[0][1]*M[1][2]-M[0][2]*M[1][1])/d],
+  [(M[1][2]*M[2][0]-M[1][0]*M[2][2])/d,(M[0][0]*M[2][2]-M[0][2]*M[2][0])/d,(M[0][2]*M[1][0]-M[0][0]*M[1][2])/d],
+  [(M[1][0]*M[2][1]-M[1][1]*M[2][0])/d,(M[0][1]*M[2][0]-M[0][0]*M[2][1])/d,(M[0][0]*M[1][1]-M[0][1]*M[1][0])/d]
+];}
 
-/* list UI */
-const items=document.getElementById('items');
-function list(){
-  items.innerHTML='';
-  P.forEach((r,i)=>{
-    const row=document.createElement('div'); row.style.display='flex'; row.style.justifyContent='space-between'; row.style.gap='6px'; row.style.padding='6px 0'; row.style.borderBottom=`1px solid var(--line)`;
-    row.innerHTML=`<div style="font-size:12.5px">${r.id}: (${rnd(r.pos.x)}, ${rnd(r.pos.y)}, ${rnd(r.pos.z)})</div>`;
-    const box=document.createElement('div');
-    const s=document.createElement('button'); s.className='btn'; s.textContent='Select'; s.onclick=()=>pick(r);
-    const d=document.createElement('button'); d.className='btn'; d.textContent='Del'; d.onclick=()=>removeAt(i);
-    box.appendChild(s); box.appendChild(d); row.appendChild(box); items.appendChild(row);
+const tbody=document.getElementById('tbody');
+const makeRow=i=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${i+1}</td><td><input type="text" placeholder="P${i+1}"></td><td><input type="number" step="any"></td><td><input type="number" step="any"></td>`;return tr;};
+function rebuildRows(n){tbody.innerHTML='';for(let i=0;i<n;i++)tbody.appendChild(makeRow(i));}
+rebuildRows(4);
+function getRows(){return [...tbody.querySelectorAll('tr')].map((tr,i)=>{const [n,e,f]=tr.querySelectorAll('input');return {name:n.value.trim()||`P${i+1}`,E:Number(e.value),N:Number(f.value)};});}
+document.getElementById('applyCount').onclick=()=>rebuildRows(Number(document.getElementById('count').value)||4);
+document.getElementById('addRow').onclick=()=>tbody.appendChild(makeRow(tbody.children.length));
+document.getElementById('removeRow').onclick=()=>{if(tbody.children.length>0)tbody.removeChild(tbody.lastElementChild);};
+
+document.getElementById('computeBtn').onclick=()=>{
+  const d=Math.max(0,Math.min(10,Number(document.getElementById('decimals').value)||0));
+  const rows=getRows();const pts=[],names=[];
+  rows.forEach((r,i)=>{if(!Number.isFinite(r.E)||!Number.isFinite(r.N))throw Error(`Row ${i+1}: need E & N`);pts.push({E:r.E,N:r.N});names.push(r.name);});
+
+  let adj=null,bfc=null;try{adj=computeAdjustedCenter(pts);}catch{}try{bfc=bestFitCircle(pts);}catch{}
+  const ref=adj?{E:adj.E,N:adj.N}:bfc?{E:bfc.E,N:bfc.N}:null;
+  const radii=ref?pts.map((p,i)=>({name:names[i],radius:distEN(ref,p)})):[];
+  document.getElementById('centerOut').textContent=adj?`Adjusted Center: E=${fmt(adj.E,d)}, N=${fmt(adj.N,d)} (triples=${adj.validTriples})`:'Adjusted Center: —';
+  document.getElementById('bfcOut').textContent=bfc?`Best-Fit Center: E=${fmt(bfc.E,d)}, N=${fmt(bfc.N,d)}, r=${fmt(bfc.r,d)}`:'Best-Fit Center: —';
+
+  let circTxt='',areaTxt='';if(bfc){circTxt=`2πr=${fmt(2*Math.PI*bfc.r,d)}`;areaTxt=`πr²=${fmt(Math.PI*bfc.r*bfc.r,d)}`;}
+  else if(radii.length){const r=radii.reduce((s,r)=>s+r.radius,0)/radii.length;circTxt=`≈ 2πr=${fmt(2*Math.PI*r,d)}`;areaTxt=`≈ πr²=${fmt(Math.PI*r*r,d)}`;}
+  document.getElementById('circleExtra').innerHTML=(circTxt?`${circTxt} | ${areaTxt}`:'');
+
+  document.getElementById('radiiBody').innerHTML=radii.map(r=>`<tr><td>${r.name}</td><td>${fmt(r.radius,d)}</td></tr>`).join("");
+  document.getElementById('results').style.display="block";
+
+  const cvs=document.getElementById('canvas'),ctx=cvs.getContext('2d');ctx.clearRect(0,0,cvs.width,cvs.height);
+  const Es=pts.map(p=>p.E),Ns=pts.map(p=>p.N),allE=[...Es],allN=[...Ns];if(adj){allE.push(adj.E);allN.push(adj.N);}if(bfc){allE.push(bfc.E);allN.push(bfc.N);}
+  const minE=Math.min(...allE),maxE=Math.max(...allE),minN=Math.min(...allN),maxN=Math.max(...allN),pad=40,scale=Math.min((cvs.width-2*pad)/(maxE-minE||1),(cvs.height-2*pad)/(maxN-minN||1));
+  const x=E=>pad+(E-minE)*scale,y=N=>cvs.height-(pad+(N-minN)*scale);
+  ctx.fillStyle="blue";pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(x(p.E),y(p.N),5,0,2*Math.PI);ctx.fill();ctx.fillText(names[i],x(p.E)+6,y(p.N)-6);});
+  if(adj){ctx.beginPath();ctx.arc(x(adj.E),y(adj.N),6,0,2*Math.PI);ctx.fillStyle="#e11";ctx.fill();ctx.fillText("Adj",x(adj.E)+8,y(adj.N));
+    const avg=radii.length?radii.reduce((s,r)=>s+r.radius,0)/radii.length:0;if(avg>0){ctx.strokeStyle="#22a255";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x(adj.E),y(adj.N),avg*scale,0,2*Math.PI);ctx.stroke();}}
+  if(bfc){ctx.beginPath();ctx.arc(x(bfc.E),y(bfc.N),6,0,2*Math.PI);ctx.fillStyle="#06f";ctx.fill();ctx.fillText("Best",x(bfc.E)+8,y(bfc.N));ctx.strokeStyle="#0a6cff";ctx.setLineDash([6,4]);ctx.beginPath();ctx.arc(x(bfc.E),y(bfc.N),bfc.r*scale,0,2*Math.PI);ctx.stroke();ctx.setLineDash([]);}
+};
+
+/* ---------- Right Triangle ---------- */
+const rA=document.getElementById('rA'),rB=document.getElementById('rB'),ra=document.getElementById('ra'),rb=document.getElementById('rb');
+document.getElementById('rightSolve').onclick=solveRight;
+document.getElementById('rightClear').onclick=()=>{[rA,rB,ra,rb].forEach(x=>x.value='');document.getElementById('rightOut').textContent='';document.getElementById('rightFig').innerHTML='';};
+function solveRight(){const A=n(rA.value),B=n(rB.value),a=n(ra.value),b=n(rb.value);
+  if(f(a)&&f(b)){const c=Math.hypot(a,b),Ad=rad2deg(Math.atan2(a,b)),Bd=90-Ad;out(a,b,c,Ad,Bd);return;}
+  if(f(a)&&f(A)){const Ar=deg2rad(A),b2=a/Math.tan(Ar),c=a/Math.sin(Ar);out(a,b2,c,A,90-A);return;}
+  if(f(b)&&f(B)){const Br=deg2rad(B),a2=b*Math.tan(Br),c=b/Math.cos(Br);out(a2,b,c,90-B,B);return;}
+  document.getElementById('rightOut').textContent='Fill (a & b) or (a & A) or (b & B).';
+}
+function out(a,b,c,A,B){
+  document.getElementById('rightOut').textContent=`a=${R(a)}, b=${R(b)}, c=${R(c)}\nA=${R(A)}°, B=${R(B)}°, (C=90°)`;
+  const W=340,H=140,p=18,k=(Math.min(W,H)-2*p)/Math.max(a,b,1),Ax=p,Ay=H-p,Bx=p+b*k,By=H-p,Cx=p+b*k,Cy=H-p-a*k,rArc=16;
+  const sAx=Ax+rArc,sAy=Ay,vACx=Cx-Ax,vACy=Cy-Ay,LAC=Math.hypot(vACx,vACy)||1,uACx=vACx/LAC,uACy=vACy/LAC,eAx=Ax+uACx*rArc,eAy=Ay+uACy*rArc;
+  const sBx=Cx,sBy=Cy+rArc,vCAx=Ax-Cx,vCAy=Ay-Cy,LCA=Math.hypot(vCAx,vCAy)||1,uCAx=vCAx/LCA,uCAy=vCAy/LCA,eBx=Cx+uCAx*rArc,eBy=Cy+uCAy*rArc;
+  document.getElementById('rightFig').innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <polyline points="${Ax},${Ay} ${Bx},${By} ${Cx},${Cy} ${Ax},${Ay}" fill="none" stroke="currentColor" stroke-width="2"/>
+    <rect x="${Bx-10}" y="${By-10}" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"/>
+    <text x="${(Ax+Bx)/2}" y="${Ay-6}" font-size="12" text-anchor="middle">b</text>
+    <text x="${Bx+6}" y="${(By+Cy)/2}" font-size="12">a</text>
+    <text x="${(Ax+Cx)/2}" y="${(Ay+Cy)/2-8}" font-size="12" text-anchor="middle">c</text>
+    <path d="M ${sAx} ${sAy} A ${rArc} ${rArc} 0 0 1 ${eAx} ${eAy}" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <path d="M ${sBx} ${sBy} A ${rArc} ${rArc} 0 0 1 ${eBx} ${eBy}" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <text x="${Ax+(eAx-Ax)*0.6}" y="${Ay+(eAy-Ay)*0.6-4}" font-size="12">A</text>
+    <text x="${Cx+(eBx-Cx)*0.6+4}" y="${Cy+(eBy-Cy)*0.6}" font-size="12">B</text>
+  </svg>`;
+}
+const n=v=>{const x=parseFloat(v);return Number.isFinite(x)?x:NaN;},f=x=>Number.isFinite(x);
+const deg2rad=d=>d*Math.PI/180,rad2deg=r=>r*180/Math.PI;
+
+/* ---------- Save IMAGE (PNG) for 2D/3D tab ---------- */
+document.getElementById('imgPts').addEventListener('click', async () => {
+  await loadCDN('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  const stageRoot = document.getElementById('stage');
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ffffff';
+  const canvas = await html2canvas(stageRoot, {scale: 2, useCORS: true, backgroundColor: bg});
+  const dataURL = canvas.toDataURL('image/png');
+  const is2D = document.getElementById('mode2d').checked;
+  const a = document.createElement('a');
+  a.href = dataURL; a.download = is2D ? 'points-2D.png' : 'points-3D.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  if (/(iPad|iPhone|iPod)/.test(navigator.userAgent)) window.open(dataURL, '_blank');
+});
+
+/* CDN loader (idempotent) */
+function loadCDN(src){
+  return new Promise((res,rej)=>{
+    if (document.querySelector(`script[src="${src}"]`)) return res();
+    const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);
   });
 }
 
-/* render loop + resize */
-(function loop(){controls.update(); renderer.render(scene,camera); labelRenderer.render(scene,camera); requestAnimationFrame(loop);})();
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); labelRenderer.setSize(innerWidth,innerHeight);});
-info();
+/* PWA register */
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}
+}); /* DOM ready end */
+</script>
 
-/* ========= CIRCLE CENTER (EN) — Adjusted + Best-Fit ========= */
-const tbody=document.getElementById('tbody');
-const fmt=(v,d=3)=>Number(v).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
-function centerFrom3(pA,pB,pC){
-  const x1=pA.E,y1=pA.N,x2=pB.E,y2=pB.N,x3=pC.E,y3=pC.N;
-  const a1=x1-x2,b1=y1-y2,a2=x1-x3,b2=y1-y3;
-  const e=((x1*x1-x2*x2)+(y1*y1-y2*y2))/2;
-  const f=((x1*x1-x3*x3)+(y1*y1-y3*y3))/2;
-  const det=a1*b2-b1*a2; if(Math.abs(det)<1e-12) return null;
-  return {E:(e*b2-b1*f)/det,N:(a1*f-e*a2)/det};
-}
-const distEN=(c,p)=>Math.hypot(c.E-p.E,c.N-p.N);
-function computeAdjustedCenter(points){
-  const n=points.length; if(n<3) throw Error("Need at least 3 points.");
-  let sumE=0,sumN=0,valid=0;
-  for(let i=0;i<n-2;i++)for(let j=i+1;j<n-1;j++)for(let k=j+1;k<n;k++){
-    const c=centerFrom3(points[i],points[j],points[k]); if(c){sumE+=c.E;sumN+=c.N;valid++;}}
-  if(valid===0) throw Error("No valid centers (collinear points).");
-  return {E:sumE/valid,N:sumN/valid,validTriples:valid};
-}
+ </head>
+<body>
+  <div class="appbar">
+    <div class="title">Created By Mr.WIN MIN KO</div>
+    <button id="theme" class="toggle">🌙</button>
+  </div>
 
-/* Best-fit circle (algebraic least squares):
-   Solve M*[a,b,c]^T ≈ t  with M=[x y 1], t=-(x^2+y^2)
-   center = (-a/2, -b/2), radius = sqrt((a^2+b^2)/4 - c)
-*/
-function bestFitCircle(points){
-  const n=points.length; if(n<3) throw Error("Need at least 3 points.");
-  let Sx=0,Sy=0,Sxx=0,Syy=0,Sxy=0,S1=n;
-  let Tx=0, Ty=0, T1=0; // components of M^T t
-  for(const p of points){
-    const x=p.E, y=p.N, t=-(x*x + y*y);
-    Sx+=x; Sy+=y; Sxx+=x*x; Syy+=y*y; Sxy+=x*y;
-    Tx+=x*t; Ty+=y*t; T1+=1*t;
-  }
-  // M^T M
-  const A = [
-    [Sxx, Sxy, Sx],
-    [Sxy, Syy, Sy],
-    [Sx , Sy , S1]
-  ];
-  const b = [Tx, Ty, T1];
-  const sol = solve3(A,b); // [a,b,c]
-  if(!sol) throw Error("Best-fit failed (singular).");
-  const a=sol[0], b2=sol[1], c=sol[2];
-  const E0 = -a/2, N0 = -b2/2;
-  const r = Math.sqrt(Math.max(0, (a*a + b2*b2)/4 - c));
-  return {E:E0, N:N0, r};
-}
+  <div class="tabs">
+    <div class="tab active" data-t="sec-points">1) Points 3D / 2D(EN)</div>
+    <div class="tab" data-t="sec-circle">2) Circle Center</div>
+    <div class="tab" data-t="sec-right">3) Right Triangle</div>
+  </div>
 
-function solve3(M, b){
-  const m = M.map(r=>r.slice());
-  let [a,b1,c] = b.slice();
-  // Gaussian elimination (3x3)
-  for(let i=0;i<3;i++){
-    // pivot
-    let piv=i; for(let r=i+1;r<3;r++) if(Math.abs(m[r][i])>Math.abs(m[piv][i])) piv=r;
-    if(Math.abs(m[piv][i])<1e-12) return null;
-    if(piv!==i){ [m[i],m[piv]]=[m[piv],m[i]]; const t=[a,b1,c]; [a,b1,c]=[t[piv],t[i],t[2]]; } // swap b components accordingly
-    const inv=1/m[i][i];
-    for(let j=i;j<3;j++) m[i][j]*=inv;
-    if(i===0){a*=inv;} else if(i===1){b1*=inv;} else {c*=inv;}
-    for(let r=0;r<3;r++) if(r!==i){
-      const f=m[r][i];
-      for(let j=i;j<3;j++) m[r][j]-=f*m[i][j];
-      if(r===0){ a-=f*(i===0?a:i===1?b1:c); }
-      if(r===1){ b1-=f*(i===0?a:i===1?b1:c); }
-      if(r===2){ c-=f*(i===0?a:i===1?b1:c); }
-    }
-  }
-  // Now m is I, but our b tracking got messy; use back-substitute safer:
-  // Re-do properly:
-  // Solve using adjoint (fallback simple):
-  const det = (M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1]) - M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0]) + M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]));
-  if(Math.abs(det)<1e-12) return null;
-  const inv = [
-    [
-      (M[1][1]*M[2][2]-M[1][2]*M[2][1])/det,
-      (M[0][2]*M[2][1]-M[0][1]*M[2][2])/det,
-      (M[0][1]*M[1][2]-M[0][2]*M[1][1])/det
-    ],
-    [
-      (M[1][2]*M[2][0]-M[1][0]*M[2][2])/det,
-      (M[0][0]*M[2][2]-M[0][2]*M[2][0])/det,
-      (M[0][2]*M[1][0]-M[0][0]*M[1][2])/det
-    ],
-    [
-      (M[1][0]*M[2][1]-M[1][1]*M[2][0])/det,
-      (M[0][1]*M[2][0]-M[0][0]*M[2][1])/det,
-      (M[0][0]*M[1][1]-M[0][1]*M[1][0])/det
-    ]
-  ];
-  return [
-    inv[0][0]*b[0] + inv[0][1]*b[1] + inv[0][2]*b[2],
-    inv[1][0]*b[0] + inv[1][1]*b[1] + inv[1][2]*b[2],
-    inv[2][0]*b[0] + inv[2][1]*b[1] + inv[2][2]*b[2],
-  ];
-}
+  <div id="stage"></div>
 
-/* Circle UI */
-function makeRow(i){const tr=document.createElement("tr");
-  tr.innerHTML=`<td>${i+1}</td><td><input type="text" placeholder="P${i+1}"></td>
-  <td><input type="number" step="any"></td><td><input type="number" step="any"></td>`;return tr;}
-const tbodyInitCount=4; rebuildRows(tbodyInitCount);
-function rebuildRows(n){tbody.innerHTML="";for(let i=0;i<n;i++)tbody.appendChild(makeRow(i));}
-function getRows(){return [...tbody.querySelectorAll("tr")].map((tr,i)=>{const [n,e,f]=tr.querySelectorAll("input");
-  return {name:n.value.trim()||`P${i+1}`,E:Number(e.value),N:Number(f.value)};});}
-document.getElementById("applyCount").onclick=()=>{rebuildRows(Number(document.getElementById("count").value)||tbodyInitCount);};
-document.getElementById("addRow").onclick=()=>{tbody.appendChild(makeRow(tbody.children.length));};
-document.getElementById("removeRow").onclick=()=>{if(tbody.children.length>0)tbody.removeChild(tbody.lastElementChild);};
+  <!-- Points -->
+  <div id="sec-points" class="section show">
+    <div class="panel">
+      <h3>Points • tap=select • 2-fingers zoom/pan/rotate</h3>
+      <div class="row" style="margin-bottom:6px">
+        <label>Hinput: <input id="Hin" type="number" step="0.1" value="0.00"></label>
+        <label>E: <input id="eIn" type="number" step="0.1" value=""></label>
+        <label>N: <input id="nIn" type="number" step="0.1" value=""></label>
+        <label>H: <input id="hIn" type="number" step="0.1" value=""></label>
+        <button id="add" class="btn ok">Add Point</button>
+        <button id="clearAll" class="btn danger">Clear All</button>
+        <button id="reset" class="btn">Reset View</button>
+        <button id="imgPts" class="btn">Save Image (PNG)</button>
+        <label style="margin-left:auto"><input id="mode2d" type="checkbox"> 2D EN mode</label>
+      </div>
+      <div id="out" class="info">Hinput = 0.000\nNo points yet. Enter E,N,H and tap "Add Point".</div>
+      <div id="items" style="margin-top:8px"></div>
+    </div>
+  </div>
 
-document.getElementById("computeBtn").onclick=()=>{
-  const d=Math.max(0,Math.min(10,Number(document.getElementById("decimals").value)||0));
-  const rows=getRows(); const pts=[],names=[];
-  rows.forEach((r,i)=>{if(!Number.isFinite(r.E)||!Number.isFinite(r.N))throw Error(`Row ${i+1}: need E and N`);
-    pts.push({E:r.E,N:r.N}); names.push(r.name);});
+  <!-- Circle Center -->
+  <div id="sec-circle" class="section">
+    <div class="panel">
+      <h3>Circle Center (E,N) — Adjusted vs Best-Fit</h3>
+      <div class="row" style="margin-bottom:6px">
+        <label><b>Rows</b> <input id="count" type="number" min="3" max="500" value="4"></label>
+        <button class="btn" id="applyCount">Apply</button>
+        <div style="margin-left:auto">Decimals: <input id="decimals" type="number" min="0" max="10" value="3" style="width:70px"></div>
+        <button class="btn ok" id="computeBtn">Compute</button>
+      </div>
+      <div class="mini" style="height:auto">
+        <table>
+          <thead><tr><th style="width:48px">#</th><th>Point</th><th>E</th><th>N</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="row" style="margin-top:6px"><button class="btn" id="addRow">+ Add row</button><button class="btn" id="removeRow">– Remove row</button></div>
+      </div>
+      <div id="results" style="display:none;margin-top:10px">
+        <div><b id="centerOut">Adjusted Center: —</b></div>
+        <div><b id="bfcOut">Best-Fit Center: —</b></div>
+        <div id="circleExtra" style="margin-top:6px"></div>
+        <table style="margin-top:8px">
+          <thead><tr><th>Point</th><th>Radius (to ref center)</th></tr></thead>
+          <tbody id="radiiBody"></tbody>
+        </table>
+        <canvas id="canvas" width="600" height="400"></canvas>
+      </div>
+    </div>
+  </div>
 
-  // Adjusted Center (average of all valid triples)
-  let adj=null; try{ adj=computeAdjustedCenter(pts); }catch(e){ adj=null; }
-
-  // Best-fit Circle (least squares)
-  let bfc=null; try{ bfc = bestFitCircle(pts); }catch(e){ bfc=null; }
-
-  // Prepare radii (to adjusted center if exists, else best-fit)
-  const refCenter = adj ? {E:adj.E,N:adj.N} : (bfc ? {E:bfc.E,N:bfc.N} : null);
-  const radii = refCenter ? pts.map((p,i)=>({name:names[i],radius:distEN(refCenter,p)})) : [];
-
-  // Output
-  const outAdj = adj ? `Adjusted Center: E=${fmt(adj.E,d)}, N=${fmt(adj.N,d)}  (triples=${adj.validTriples})` : 'Adjusted Center: —';
-  const outBfc = bfc ? `Best-Fit Center: E=${fmt(bfc.E,d)}, N=${fmt(bfc.N,d)}, r=${fmt(bfc.r,d)}` : 'Best-Fit Center: —';
-  document.getElementById("centerOut").textContent = outAdj;
-  document.getElementById("bfcOut").textContent    = outBfc;
-
-  // If we have best-fit, add circumference/area from r; else use avgR
-  let drawR = null, circTxt='', areaTxt='';
-  if(bfc){
-    drawR = bfc.r;
-    circTxt = `2πr=${fmt(2*Math.PI*bfc.r,d)}`;
-    areaTxt = `πr²=${fmt(Math.PI*bfc.r*bfc.r,d)}`;
-  }else if(radii.length){
-    const avgR = radii.reduce((s,r)=>s+r.radius,0)/radii.length;
-    drawR = avgR;
-    circTxt = `≈ 2πr=${fmt(2*Math.PI*avgR,d)}`;
-    areaTxt = `≈ πr²=${fmt(Math.PI*avgR*avgR,d)}`;
-  }
-  document.getElementById("circleExtra").innerHTML = (drawR!==null) ? `${circTxt} | ${areaTxt}` : '';
-
-  // table
-  document.getElementById("radiiBody").innerHTML=radii.map(r=>`<tr><td>${r.name}</td><td>${fmt(r.radius,d)}</td></tr>`).join("");
-  document.getElementById("results").style.display="block";
-
-  // Draw (points + adjusted circle + best-fit circle)
-  const cvs=document.getElementById("canvas"), ctx=cvs.getContext("2d");
-  ctx.clearRect(0,0,cvs.width,cvs.height);
-  const Es=pts.map(p=>p.E), Ns=pts.map(p=>p.N);
-  const allE=[...Es], allN=[...Ns];
-  if(adj){ allE.push(adj.E); allN.push(adj.N); }
-  if(bfc){ allE.push(bfc.E); allN.push(bfc.N); }
-  const minE=Math.min(...allE), maxE=Math.max(...allE);
-  const minN=Math.min(...allN), maxN=Math.max(...allN);
-  const pad=40; const scale=Math.min((cvs.width-2*pad)/(maxE-minE||1),(cvs.height-2*pad)/(maxN-minN||1));
-  const x=E=>pad+(E-minE)*scale, y=N=>cvs.height-(pad+(N-minN)*scale);
-
-  // points
-  ctx.fillStyle="blue";
-  pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(x(p.E),y(p.N),5,0,2*Math.PI);ctx.fill();ctx.fillText(names[i],x(p.E)+6,y(p.N)-6);});
-
-  // adjusted center + circle (avgR)
-  if(adj){
-    ctx.beginPath();ctx.arc(x(adj.E),y(adj.N),6,0,2*Math.PI);ctx.fillStyle="#e11";ctx.fill();
-    ctx.fillText("Adj",x(adj.E)+8,y(adj.N));
-    const avgR = radii.length ? radii.reduce((s,r)=>s+r.radius,0)/radii.length : 0;
-    if(avgR>0){
-      ctx.strokeStyle="#22a255"; ctx.lineWidth=1.5;
-      ctx.beginPath();ctx.arc(x(adj.E),y(adj.N),avgR*scale,0,2*Math.PI);ctx.stroke();
-    }
-  }
-
-  // best-fit center + circle
-  if(bfc){
-    ctx.beginPath();ctx.arc(x(bfc.E),y(bfc.N),6,0,2*Math.PI);ctx.fillStyle="#06f";ctx.fill();
-    ctx.fillText("Best",x(bfc.E)+8,y(bfc.N));
-    ctx.strokeStyle="#0a6cff"; ctx.setLineDash([6,4]);
-    ctx.beginPath();ctx.arc(x(bfc.E),y(bfc.N),bfc.r*scale,0,2*Math.PI);ctx.stroke();
-    ctx.setLineDash([]);
-  }
-};
-
-/* ========= RIGHT TRIANGLE ========= */
-const rA=document.getElementById('rA'), rB=document.getElementById('rB'), ra=document.getElementById('ra'), rb=document.getElementById('rb');
-document.getElementById('rightSolve').onclick=solveRight;
-document.getElementById('rightClear').onclick=()=>{[rA,rB,ra,rb].forEach(x=>x.value=''); document.getElementById('rightOut').textContent=''; document.getElementById('rightFig').innerHTML='';};
-function solveRight(){
-  const A=n( rA.value), B=n( rB.value), a=n( ra.value), b=n( rb.value);
-  if(f(a)&&f(b)){ const c=Math.hyp
+  <!-- Right Triangle -->
+  <div id="sec-right" class="section">
+    <div class="panel">
+      <h3>Right Triangle</h3>
+      <div class="row" style="margin-bottom:6px">
+        <label>a (leg): <input id="ra" type="number" step="0.1"></label>
+        <label>b (leg): <input id="rb" type="number" step="0.1"></label>
+        <label>Angle A (°): <input id="rA" type="number" step="0.1"></label>
+        <label>Angle B (°): <input id="rB" type="number" step="0.1"></label>
+        <button id="rightSolve" class="btn ok">Solve</button>
+        <button id="rightClear" class="btn">Clear</button>
+      </div>
+      <div class="mini" id="rightFig"></div>
+      <div id="rightOut" class="info"></div>
+    </div>
+  </div>
+</body>
+</html> 
