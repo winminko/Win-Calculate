@@ -19,3 +19,7 @@ input{padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 .menu{margin:8px 0 0 16px} .menu li{margin:6px 0}
 .lbl{padding:3px 6px;border-radius:8px;background:#ffffffcc;border:1px solid #0001;font-weight:800;font-size:12px;color:#111}
 .box{border:1px dashed var(--line);border-radius:12px}
+/* ... (ရှိပြီးသား style အပေါ်ကီးနေရာမပြောင်း) ... */
+.tableWrap{overflow-x:auto}
+table{width:100%;min-width:520px;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
