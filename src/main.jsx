@@ -1,34 +1,46 @@
-BrowserRouter React from "react";
+// /src/main.jsx
+import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import "./styles.css";
 
-createRoot(document.getElementById("root")).render(
+// -------- Mount React App --------
+const rootEl = document.getElementById("root");
+createRoot(rootEl).render(
   <BrowserRouter>
     <App />
-  </BrowserRouter// ...ရှိပြီးသား import/render အောက်ကနေပါ
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js");
-}
-
-// Install prompt helper
-const btn = document.createElement("button");
-btn.textContent = "Install";
-btn.className = "fab";
-btn.style.display = "none";
-document.body.appendChild(btn);
-let deferred;
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault(); deferred = e; btn.style.display = "flex";
-});
-btn.onclick = async () => {
-  if (!deferred) return;
-  deferred.prompt();
-  await deferred.userChoice;
-  btn.style.display = "none";
-  deferred = null;
-};>
+  </BrowserRouter>
 );
 
+// -------- Service Worker (PWA) --------
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch((err) => {
+    console.warn("SW register failed:", err);
+  });
+}
 
+// -------- “Install” (Add to Home Screen) helper --------
+const installBtn = document.createElement("button");
+installBtn.textContent = "Install";
+installBtn.className = "fab";
+installBtn.style.display = "none";
+document.body.appendChild(installBtn);
+
+let deferredPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  // Prevent the mini-infobar on mobile
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = "flex"; // show button
+});
+
+installBtn.addEventListener("click", async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  // hide button after user action
+  installBtn.style.display = "none";
+  deferredPrompt = null;
+});
