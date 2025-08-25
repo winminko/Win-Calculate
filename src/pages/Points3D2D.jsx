@@ -200,7 +200,7 @@ export default function Points2D() {
         setSegs(s => [...s, { i: sel[0], j: hit }]);
         setHist(h => [...h, { t: "seg" }]);
         const A = pts[sel[0]], B = pts[hit];
-        setInfo(`Segment ${pts[sel[0]].name}-${pts[hit]].name}  •  ΔE=${(B.E-A.E).toFixed(3)}  ΔN=${(B.N-A.N).toFixed(3)}  dEN=${Math.hypot(B.E-A.E,B.N-A.N).toFixed(3)}  •  H(A)=${A.H === "" ? "-" : A.H}  H(B)=${B.H === "" ? "-" : B.H}`);
+        setInfo(`Segment ${pts[sel[0]].name}-${pts[hit].name}  •  ΔE=${(B.E-A.E).toFixed(3)}  ΔN=${(B.N-A.N).toFixed(3)}  dEN=${Math.hypot(B.E-A.E,B.N-A.N).toFixed(3)}  •  H(A)=${A.H === "" ? "-" : A.H}  H(B)=${B.H === "" ? "-" : B.H}`);
         setSel([]); // reset
       } else setSel([hit]);
     } else {
