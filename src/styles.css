@@ -1,0 +1,21 @@
+:root{--bg:#f6f7fb;--card:#ffffff;--line:#e9e9ee;--text:#0f1115;--accent:#6c5ce7;--ok:#12b886;--danger:#ff6b6b}
+*{box-sizing:border-box} html,body,#root{height:100%} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,"Noto Sans Myanmar",sans-serif}
+.appbar{position:sticky;top:0;z-index:5;background:#fffaa9cc;border-bottom:1px solid var(--line);backdrop-filter:blur(8px);padding:10px 12px;display:flex;gap:10px;align-items:center}
+.title{font-weight:900}
+.nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.tab{padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-weight:800;text-decoration:none;color:inherit}
+.tab.active{background:var(--accent);color:#fff;border-color:transparent}
+.content{padding:14px}
+.page{position:relative;min-height:70vh}
+.stage{position:relative;height:56vh;border:1px solid var(--line);border-radius:12px;background:#fff}
+.panel,.card{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 6px 20px rgba(0,0,0,.06)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{font-size:13px;color:#59607a}
+input{padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.btn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:800;cursor:pointer}
+.btn.ok{background:var(--ok);color:#00251f;border:0}
+.btn.danger{background:var(--danger);color:#fff;border:0}
+.info{white-space:pre-wrap;font-size:13px}
+.menu{margin:8px 0 0 16px} .menu li{margin:6px 0}
+.lbl{padding:3px 6px;border-radius:8px;background:#ffffffcc;border:1px solid #0001;font-weight:800;font-size:12px;color:#111}
+.box{border:1px dashed var(--line);border-radius:12px}
