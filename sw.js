@@ -1,9 +1,12 @@
 self.addEventListener("install", (e) => {
-  self.skipWaiting();
-});
-self.addEventListener("activate", (e) => {
-  clients.claim();
+  e.waitUntil(caches.open("win-calc-v1").then((c) => c.addAll(["/", "/index.html"])));
 });
 self.addEventListener("fetch", (e) => {
-  // Passthrough fetch; enough for A2HS criteria
+  e.respondWith(
+    caches.match(e.request).then((r) => r || fetch(e.request).then((res) => {
+      const copy = res.clone();
+      caches.open("win-calc-v1").then((c) => c.put(e.request, copy));
+      return res;
+    }))
+  );
 });
