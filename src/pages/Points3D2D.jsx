@@ -1,216 +1,154 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const load = (src) =>
-  new Promise((res, rej) => {
-    if (document.querySelector(`script[src="${src}"]`)) return res();
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = res;
-    s.onerror = () => rej(new Error("failed " + src));
-    document.body.appendChild(s);
-  });
+export default function Points2DOnly() {
+  const cvsRef = useRef(null);
+  const [pts, setPts] = useState([]);        // {E,N,H,name}
+  const [form, setForm] = useState({ E: "", N: "", H: "" });
+  const [info, setInfo] = useState('No points yet. Enter E,N,H and tap "Add Point".');
+  const [sel, setSel] = useState({ a: null, b: null });
 
-export default function Points3D2D() {
-  const wrapRef = useRef(null);
-  const [en, setEN] = useState({ E: "", N: "", H: "" });
-  const [log, setLog] = useState("Loading 3D engine…");
-  const [mode2D, setMode2D] = useState(false);
-  const apiRef = useRef(null);
+  useEffect(() => draw(), [pts, sel]);
+
+  const addPoint = () => {
+    const E = parseFloat(form.E);
+    const N = parseFloat(form.N);
+    const H = form.H === "" ? "" : parseFloat(form.H); // H ကို 그대로 သိမ်း (မတွက်)
+    if (!Number.isFinite(E) || !Number.isFinite(N)) {
+      alert("Enter valid E and N.");
+      return;
+    }
+    const name = `P${pts.length + 1}`;
+    setPts([...pts, { E, N, H, name }]);
+    setForm({ E: "", N: "", H: "" });
+    setInfo(`Added ${name} — E:${E}, N:${N}, H:${H === "" ? "-" : H}. Tap canvas to select.`);
+  };
+
+  const clearAll = () => {
+    setPts([]); setSel({ a: null, b: null });
+    setInfo('Cleared. Enter E,N,H and add again.');
+  };
+
+  const savePNG = () => {
+    const url = cvsRef.current.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url; a.download = "points-2d.png"; a.click();
+  };
+
+  const fit = () => {
+    const c = cvsRef.current, pad = 36;
+    let minE = 0, maxE = 1, minN = 0, maxN = 1;
+    if (pts.length) {
+      minE = Math.min(...pts.map(p => p.E));
+      maxE = Math.max(...pts.map(p => p.E));
+      minN = Math.min(...pts.map(p => p.N));
+      maxN = Math.max(...pts.map(p => p.N));
+    }
+    if (maxE === minE) { maxE += 1; minE -= 1; }
+    if (maxN === minN) { maxN += 1; minN -= 1; }
+    const scale = Math.min(
+      (c.width - 2 * pad) / (maxE - minE),
+      (c.height - 2 * pad) / (maxN - minN)
+    );
+    const x = (E) => pad + (E - minE) * scale;
+    const y = (N) => c.height - (pad + (N - minN) * scale);
+    return { x, y, scale, pad };
+  };
+
+  const draw = () => {
+    const c = cvsRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    // light grid
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = "#f1f5f9";
+    for (let i = 0; i < c.width; i += 40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, c.height); ctx.stroke(); }
+    for (let j = 0; j < c.height; j += 40) { ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(c.width, j); ctx.stroke(); }
+
+    const { x, y } = fit();
+
+    // selected line
+    if (sel.a !== null && sel.b !== null) {
+      const A = pts[sel.a], B = pts[sel.b];
+      ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x(A.E), y(A.N)); ctx.lineTo(x(B.E), y(B.N)); ctx.stroke();
+    }
+
+    // points + labels
+    pts.forEach((p, i) => {
+      const sx = x(p.E), sy = y(p.N);
+      const r = (i === sel.a || i === sel.b) ? 6 : 5;
+      ctx.fillStyle = (i === sel.a || i === sel.b) ? "#6c5ce7" : "#111";
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#475569"; ctx.fillText(p.name, sx + 8, sy - 6);
+    });
+
+    // info text
+    if (sel.a !== null && sel.b !== null) {
+      const A = pts[sel.a], B = pts[sel.b];
+      const dE = B.E - A.E, dN = B.N - A.N, dEN = Math.hypot(dE, dN);
+      let bearing = Math.atan2(dN, dE) * 180 / Math.PI; if (bearing < 0) bearing += 360;
+
+      // H ကို **မတွက်** — A, B တိုင်းရဲ့ input တန်ဖိုးကိုပဲ ပြ
+      const hA = (A.H === "" || !Number.isFinite(A.H)) ? "-" : A.H;
+      const hB = (B.H === "" || !Number.isFinite(B.H)) ? "-" : B.H;
+
+      const text =
+`A=${A.name}  B=${B.name}
+ΔE=${dE.toFixed(3)} , ΔN=${dN.toFixed(3)} , dEN=${dEN.toFixed(3)}
+Bearing=${bearing.toFixed(3)}°
+H(A)=${hA} , H(B)=${hB}`;
+      setInfo(text);
+    }
+  };
+
+  const onPick = (ev) => {
+    const rect = cvsRef.current.getBoundingClientRect();
+    const cx = ev.clientX - rect.left, cy = ev.clientY - rect.top;
+    const { x, y } = fit();
+    let hit = -1, dmin = 18;
+    pts.forEach((p, i) => {
+      const d = Math.hypot(x(p.E) - cx, y(p.N) - cy);
+      if (d < dmin) { dmin = d; hit = i; }
+    });
+    if (hit === -1) return;
+    if (sel.a === null) setSel({ a: hit, b: null });
+    else if (sel.b === null && hit !== sel.a) setSel({ a: sel.a, b: hit });
+    else setSel({ a: hit, b: null });
+  };
 
   useEffect(() => {
-    let renderer, labelRenderer, camera, controls, scene, group, link, onResize;
-    (async () => {
-      try {
-        await load("https://unpkg.com/three@0.158.0/build/three.min.js");
-        await load("https://unpkg.com/three@0.158.0/examples/js/controls/OrbitControls.js");
-        await load("https://unpkg.com/three@0.158.0/examples/js/renderers/CSS2DRenderer.js");
-        const THREE = window.THREE;
-
-        const root = wrapRef.current;
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(
-          55,
-          root.clientWidth / root.clientHeight,
-          0.1,
-          2000
-        );
-        camera.position.set(8, 6, 8);
-
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(root.clientWidth, root.clientHeight);
-        root.appendChild(renderer.domElement);
-
-        labelRenderer = new THREE.CSS2DRenderer();
-        labelRenderer.setSize(root.clientWidth, root.clientHeight);
-        labelRenderer.domElement.style.position = "absolute";
-        labelRenderer.domElement.style.inset = "0";
-        labelRenderer.domElement.style.pointerEvents = "none";
-        root.appendChild(labelRenderer.domElement);
-
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-
-        scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-        const dl = new THREE.DirectionalLight(0xffffff, 0.45);
-        dl.position.set(3, 5, 4);
-        scene.add(dl);
-        scene.add(new THREE.GridHelper(200, 200, 0x999999, 0xdddddd));
-        scene.add(new THREE.AxesHelper(6));
-
-        const ptGeo = new THREE.SphereGeometry(0.12, 24, 24);
-        const ptMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-        group = new THREE.Group();
-        link = new THREE.Group();
-        scene.add(group);
-        scene.add(link);
-
-        const label = (t) => {
-          const el = document.createElement("div");
-          el.className = "lbl";
-          el.textContent = t;
-          return new THREE.CSS2DObject(el);
-        };
-
-        let selA = null,
-          selB = null;
-        const drawLine = () => {
-          link.clear();
-          if (!selA || !selB) return;
-          const g = new THREE.BufferGeometry().setFromPoints([
-            selA.position.clone(),
-            selB.position.clone(),
-          ]);
-          link.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x333333 })));
-        };
-
-        const nearest = (cx, cy) => {
-          const r = renderer.domElement.getBoundingClientRect();
-          let best = null,
-            dmin = 28;
-          group.children.forEach((m) => {
-            const v = m.position.clone().project(camera);
-            const sx = (v.x * 0.5 + 0.5) * r.width;
-            const sy = (-v.y * 0.5 + 0.5) * r.height;
-            const d = Math.hypot(sx - cx, sy - cy);
-            if (d < dmin) {
-              dmin = d;
-              best = m;
-            }
-          });
-          return best;
-        };
-
-        renderer.domElement.addEventListener("pointerup", (e) => {
-          const rect = renderer.domElement.getBoundingClientRect();
-          const hit = nearest(e.clientX - rect.left, e.clientY - rect.top);
-          if (!hit) return;
-          if (!selA) {
-            selA = hit;
-            selA.scale.setScalar(1.28);
-          } else if (!selB && hit !== selA) {
-            selB = hit;
-            selB.scale.setScalar(1.28);
-            drawLine();
-          } else {
-            selA && selA.scale.setScalar(1);
-            selB && selB.scale.setScalar(1);
-            selA = hit;
-            selB = null;
-            link.clear();
-            selA.scale.setScalar(1.28);
-          }
-          showInfo();
-        });
-
-        const showInfo = () => {
-          if (!selA || !selB) {
-            setLog("Select 2 points to measure.");
-            return;
-          }
-          const A = selA.position,
-            B = selB.position;
-          const dE = B.x - A.x,
-            dN = B.y - A.y,
-            dH = B.z - A.z;
-          const dEN = Math.hypot(dE, dN),
-            d3 = Math.hypot(dEN, dH);
-          let plan = (Math.atan2(dN, dE) * 180) / Math.PI;
-          if (plan < 0) plan += 360;
-          const elev = (Math.atan2(dH, dEN) * 180) / Math.PI;
-          let t = `ΔE=${dE.toFixed(3)}, ΔN=${dN.toFixed(3)}, ΔH=${dH.toFixed(3)}
-Plan dEN=${dEN.toFixed(3)} | 3D=${d3.toFixed(3)}
-Plan angle=${plan.toFixed(3)}° | Elevation=${elev.toFixed(3)}°`;
-          if (mode2D) t += `\n[2D] dEN=${dEN.toFixed(3)} | Bearing=${plan.toFixed(3)}°`;
-          setLog(t);
-        };
-
-        // public API for React buttons
-        apiRef.current = {
-          add(E, N, H) {
-            const id = `P${group.children.length + 1}`;
-            const m = new THREE.Mesh(ptGeo, ptMat);
-            m.position.set(E, N, H);
-            m.add(label(id));
-            group.add(m);
-            setLog(`Added ${id} (${E}, ${N}, ${H}). Tap 2 points to measure.`);
-          },
-          clear() {
-            group.clear();
-            link.clear();
-            setLog("Cleared. Add points again.");
-          },
-        };
-
-        const render = () => {
-          controls.update();
-          renderer.render(scene, camera);
-          labelRenderer.render(scene, camera);
-          requestAnimationFrame(render);
-        };
-        render();
-
-        onResize = () => {
-          const w = wrapRef.current.clientWidth;
-          const h = wrapRef.current.clientHeight;
-          renderer.setSize(w, h);
-          labelRenderer.setSize(w, h);
-          camera.aspect = w / h;
-          camera.updateProjectionMatrix();
-        };
-        window.addEventListener("resize", onResize);
-
-        setLog("3D ready • Add points below.");
-      } catch (err) {
-        setLog("3D engine failed: " + err.message);
-      }
-    })();
-
-    return () => window.removeEventListener("resize", onResize || (() => {}));
-  }, [mode2D]);
-
-  const add = () => {
-    const E = parseFloat(en.E) || 0;
-    const N = parseFloat(en.N) || 0;
-    const H = parseFloat(en.H) || 0;
-    apiRef.current?.add(E, N, H);
-    setEN({ E: "", N: "", H: "" });
-  };
+    const c = cvsRef.current;
+    const resize = () => {
+      const box = c.parentElement.getBoundingClientRect();
+      c.width = Math.floor(box.width);
+      c.height = Math.floor(box.width * 0.62);
+      draw();
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+    // eslint-disable-next-line
+  }, []);
 
   return (
     <div className="page">
-      <div ref={wrapRef} className="stage" />
-      <div className="panel">
-        <h3>Points • tap=select • 2-fingers zoom/pan/rotate</h3>
+      <div className="stage2d" onClick={onPick}>
+        <canvas ref={cvsRef} />
+      </div>
+
+      <div className="card">
+        <h3>Points • 2D (EN only) • H is shown as input value</h3>
         <div className="row">
-          <label>E:<input type="number" value={en.E} onChange={(e)=>setEN({...en,E:e.target.value})}/></label>
-          <label>N:<input type="number" value={en.N} onChange={(e)=>setEN({...en,N:e.target.value})}/></label>
-          <label>H:<input type="number" value={en.H} onChange={(e)=>setEN({...en,H:e.target.value})}/></label>
-          <button className="btn ok" onClick={add}>Add Point</button>
-          <button className="btn danger" onClick={()=>apiRef.current?.clear()}>Clear All</button>
-          <label style={{marginLeft:"auto"}}><input type="checkbox" checked={mode2D} onChange={(e)=>setMode2D(e.target.checked)}/> 2D EN mode</label>
+          <label>E:<input type="number" value={form.E} onChange={e=>setForm({...form,E:e.target.value})} /></label>
+          <label>N:<input type="number" value={form.N} onChange={e=>setForm({...form,N:e.target.value})} /></label>
+          <label>H:<input type="number" value={form.H} onChange={e=>setForm({...form,H:e.target.value})} /></label>
+          <button className="btn ok" onClick={addPoint}>Add Point</button>
+          <button className="btn danger" onClick={clearAll}>Clear All</button>
+          <button className="btn" onClick={savePNG} style={{marginLeft:"auto"}}>Save Image (PNG)</button>
         </div>
-        <pre className="info">{log}</pre>
+        <pre className="info">{info}</pre>
       </div>
     </div>
   );
-    }
+  }
