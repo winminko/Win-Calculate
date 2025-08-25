@@ -23,3 +23,5 @@ input{padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 .tableWrap{overflow-x:auto}
 table{width:100%;min-width:520px;border-collapse:collapse}
 th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+.fab{position:fixed;right:14px;bottom:18px;display:flex;align-items:center;justify-content:center;
+  width:64px;height:40px;border-radius:999px;background:var(--accent);color:#fff;font-weight:800;border:0;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:50}
