@@ -7,18 +7,47 @@ export default function Points2DOnly() {
   const [info, setInfo] = useState('No points yet. Enter E,N,H and tap "Add Point".');
   const [sel, setSel] = useState({ a: null, b: null });
 
+  // --- draw whenever points/selection change
   useEffect(() => draw(), [pts, sel]);
+
+  // --- ensure canvas has real size (ResizeObserver + fallback)
+  useEffect(() => {
+    const c = cvsRef.current;
+    const parent = c.parentElement;
+
+    const setSize = () => {
+      const box = parent.getBoundingClientRect();
+      let w = Math.floor(box.width);
+      if (!w || w < 10) w = 640;                // ✅ fallback width
+      const h = Math.floor(w * 0.62);           // keep aspect
+      c.width = w;
+      c.height = h;
+      draw();
+    };
+
+    // First paint
+    setSize();
+
+    // Watch for layout changes
+    const ro = new ResizeObserver(setSize);
+    ro.observe(parent);
+
+    // Also a micro fallback after CSS loads
+    const t = setTimeout(setSize, 0);
+
+    return () => { ro.disconnect(); clearTimeout(t); };
+    // eslint-disable-next-line
+  }, []);
 
   const addPoint = () => {
     const E = parseFloat(form.E);
     const N = parseFloat(form.N);
-    const H = form.H === "" ? "" : parseFloat(form.H); // H ကို 그대로 သိမ်း (မတွက်)
+    const H = form.H === "" ? "" : parseFloat(form.H); // show-only
     if (!Number.isFinite(E) || !Number.isFinite(N)) {
-      alert("Enter valid E and N.");
-      return;
+      alert("Enter valid E and N."); return;
     }
     const name = `P${pts.length + 1}`;
-    setPts([...pts, { E, N, H, name }]);
+    setPts(prev => [...prev, { E, N, H, name }]);
     setForm({ E: "", N: "", H: "" });
     setInfo(`Added ${name} — E:${E}, N:${N}, H:${H === "" ? "-" : H}. Tap canvas to select.`);
   };
@@ -34,6 +63,7 @@ export default function Points2DOnly() {
     a.href = url; a.download = "points-2d.png"; a.click();
   };
 
+  // world->screen fit
   const fit = () => {
     const c = cvsRef.current, pad = 36;
     let minE = 0, maxE = 1, minN = 0, maxN = 1;
@@ -51,30 +81,34 @@ export default function Points2DOnly() {
     );
     const x = (E) => pad + (E - minE) * scale;
     const y = (N) => c.height - (pad + (N - minN) * scale);
-    return { x, y, scale, pad };
+    return { x, y };
   };
 
   const draw = () => {
     const c = cvsRef.current; if (!c) return;
     const ctx = c.getContext("2d");
-    ctx.clearRect(0, 0, c.width, c.height);
 
-    // light grid
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = "#f1f5f9";
+    // clear + bg
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, c.width, c.height);
+
+    // grid
+    ctx.strokeStyle = "#eef2f7";
     for (let i = 0; i < c.width; i += 40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, c.height); ctx.stroke(); }
     for (let j = 0; j < c.height; j += 40) { ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(c.width, j); ctx.stroke(); }
 
     const { x, y } = fit();
 
-    // selected line
+    // line if selected
     if (sel.a !== null && sel.b !== null) {
       const A = pts[sel.a], B = pts[sel.b];
       ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(x(A.E), y(A.N)); ctx.lineTo(x(B.E), y(B.N)); ctx.stroke();
     }
 
-    // points + labels
+    // points
+    ctx.font = "12px system-ui, Segoe UI, Roboto, sans-serif";
     pts.forEach((p, i) => {
       const sx = x(p.E), sy = y(p.N);
       const r = (i === sel.a || i === sel.b) ? 6 : 5;
@@ -83,25 +117,23 @@ export default function Points2DOnly() {
       ctx.fillStyle = "#475569"; ctx.fillText(p.name, sx + 8, sy - 6);
     });
 
-    // info text
+    // info
     if (sel.a !== null && sel.b !== null) {
       const A = pts[sel.a], B = pts[sel.b];
       const dE = B.E - A.E, dN = B.N - A.N, dEN = Math.hypot(dE, dN);
       let bearing = Math.atan2(dN, dE) * 180 / Math.PI; if (bearing < 0) bearing += 360;
-
-      // H ကို **မတွက်** — A, B တိုင်းရဲ့ input တန်ဖိုးကိုပဲ ပြ
       const hA = (A.H === "" || !Number.isFinite(A.H)) ? "-" : A.H;
       const hB = (B.H === "" || !Number.isFinite(B.H)) ? "-" : B.H;
-
-      const text =
+      setInfo(
 `A=${A.name}  B=${B.name}
 ΔE=${dE.toFixed(3)} , ΔN=${dN.toFixed(3)} , dEN=${dEN.toFixed(3)}
 Bearing=${bearing.toFixed(3)}°
-H(A)=${hA} , H(B)=${hB}`;
-      setInfo(text);
+H(A)=${hA} , H(B)=${hB}`
+      );
     }
   };
 
+  // pick nearest point on click
   const onPick = (ev) => {
     const rect = cvsRef.current.getBoundingClientRect();
     const cx = ev.clientX - rect.left, cy = ev.clientY - rect.top;
@@ -117,20 +149,6 @@ H(A)=${hA} , H(B)=${hB}`;
     else setSel({ a: hit, b: null });
   };
 
-  useEffect(() => {
-    const c = cvsRef.current;
-    const resize = () => {
-      const box = c.parentElement.getBoundingClientRect();
-      c.width = Math.floor(box.width);
-      c.height = Math.floor(box.width * 0.62);
-      draw();
-    };
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-    // eslint-disable-next-line
-  }, []);
-
   return (
     <div className="page">
       <div className="stage2d" onClick={onPick}>
@@ -138,7 +156,7 @@ H(A)=${hA} , H(B)=${hB}`;
       </div>
 
       <div className="card">
-        <h3>Points • 2D (EN only) • H is shown as input value</h3>
+        <h3>Points • 2D (EN only) • H is shown as your input</h3>
         <div className="row">
           <label>E:<input type="number" value={form.E} onChange={e=>setForm({...form,E:e.target.value})} /></label>
           <label>N:<input type="number" value={form.N} onChange={e=>setForm({...form,N:e.target.value})} /></label>
@@ -151,4 +169,4 @@ H(A)=${hA} , H(B)=${hB}`;
       </div>
     </div>
   );
-  }
+                                  }
